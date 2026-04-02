@@ -5,9 +5,7 @@ import mongoose, { connect } from "mongoose";
  import connectDB from "./db/index.js";
  import {app} from "./app.js"
   
- dotenv.config({
-  path:'.env'
- })
+ dotenv.config()
 
  connectDB()
 
@@ -20,6 +18,8 @@ import mongoose, { connect } from "mongoose";
   console.log(`MONGO db connection field:`,err);
   
  })
+
+
 
 
 

@@ -3,8 +3,8 @@ import {ApiError} from  "../utils/ApiError.js"
 import { User } from "../models/user.model.js";
 
 import { uploadcloudinary } from "../utils/cloudinary.js";
-import { ApiResponse } from "../utils/ApiRespose.js";
-import { json } from "express";
+import { ApiResponse } from "../utils/ApiResponse.js";
+
 
 const userRegister=asyncHandler( async (req,res)=>{
   
@@ -19,7 +19,7 @@ const userRegister=asyncHandler( async (req,res)=>{
    //return res
 
 
-  const {fullName,email,username,password}=req.body || {}
+  const {fullName,email,username,password}=req.body 
   console.log("email:",email)
   
 //   if(fullName==""){
@@ -41,7 +41,7 @@ if(
 //User.findOne({email})       // ai vabeo akta akta check kora jai,kin2 ami aksathe 2 ,3 ta check korbo sei 
 // jonno operator use korte hobe ,operator doulaer sing dia lekha hoi
 
-   const existenduser=User.findOne(
+   const existenduser= await User.findOne(
    {
       $or:[{username},{email}]
    }
@@ -53,37 +53,48 @@ if(existenduser){
 
 //check for images ,check for avatar
 
-const avatarLocalpath=req.files?.avatar[0]?.path;
+// console.log(req.files)
 
-const coverImagelocalpath=req.files?.coverImage[0]?.path;
 
+const avatarLocalpath=req.files?.avatar?.[0]?.path;
+console.log("path:",avatarLocalpath)
+
+const coverImagelocalpath=req.files?.coverImage?.[0]?.path;
+console.log("Cover Image local path : ", coverImagelocalpath)
 
 if(!avatarLocalpath){
-   throw new ApiError(409,"avatar ie required")
+   throw new ApiError(400,"avatar ie required")
    
 }
-
- const avatar=await uploadcloudinary(avatarLocalpath);
- const coverImage=await uploadcloudinary(coverImagelocalpath);
-
+console.log(avatarLocalpath)
+let avatar
+  try {
+   avatar = await uploadcloudinary(avatarLocalpath);
+   console.log("Avatar uploaded successfully")
+  } catch (error) {
+   console.log("Err Uploading the avatar", error)
+  }
+const coverImage = coverImagelocalpath
+  ? await uploadcloudinary(coverImagelocalpath)
+  : null;
  if(!avatar){
-   throw new ApiError(409,"avatar ie required");
+   throw new ApiError(409,"avatar is required");
  }
 
  const user=await User.create(
    {
       fullName,
-      avatar:avatar.url,
+      avatar:avatar?.url,
       coverImage:coverImage?.url || "",
       email,
       password,
-      username:username.toLowercase()
+      username:username.toLowerCase()
    }
  )
 
  //check user creation
   const createduserbyid=await User.findById(user._id).select(
-   -password -refressToken  // jegulo remove korte hobe segulo likhte hoi because age thake sob seclect hoa a6e
+  " -password -refreshToken"  // jegulo remove korte hobe segulo likhte hoi because age thake sob seclect hoa a6e
   )
 
   if (!createduserbyid) {
@@ -91,10 +102,11 @@ if(!avatarLocalpath){
   }
 
 
-  return res.status(201),json(
+res.status(201).json(
    new ApiResponse(200,createduserbyid,"user registerd successfully")
   )
   
+
 
 })
 
