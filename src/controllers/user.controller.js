@@ -4,6 +4,28 @@ import { User } from "../models/user.model.js";
 
 import { uploadcloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken"
+
+
+const generateAccessandRefreshToken= async (userid)=>{
+  try {
+
+   const myuser= await User.findById(userid)
+   const myuseraccesstoken= await myuser.generatetoken()
+   const myuserrefreshtoken= await myuser.refreshtoken()
+
+   //refreshtoken  k data base  a save kore rakhte hobe jeno bar bar password dite na hoi
+
+   myuser.refreshToken=myuserrefreshtoken
+  await myuser.save({validateBeforeSave:false})
+
+  return {myuseraccesstoken,myuserrefreshtoken}
+   
+  } catch (error) {
+   throw new ApiError(404,error)
+  }
+}
+
 
 
 const userRegister=asyncHandler( async (req,res)=>{
@@ -66,7 +88,7 @@ if(!avatarLocalpath){
    throw new ApiError(400,"avatar ie required")
    
 }
-console.log(avatarLocalpath)
+console.log("avatar:",avatarLocalpath)
 let avatar
   try {
    avatar = await uploadcloudinary(avatarLocalpath);
@@ -110,4 +132,145 @@ res.status(201).json(
 
 })
 
-export {userRegister}
+const userLogin=asyncHandler(async(req,res)=>{
+
+   //res body->data
+   // username, email
+   //email,password
+   //access and refresh token
+   //send cokies
+
+   const {username,email,password}=req.body
+   console.log("email:",email);
+
+   if (!((username || email) && password)) {
+      throw new ApiError(400,"username or password is must be required")
+
+   }
+     const user=  await User.findOne(
+         {
+         $or:[{username},{email}]
+         }
+      )
+
+      if (!user) {
+         throw new ApiError(404,"user does not exist")
+      }
+
+    const ispassword=  await user.checkpassword(password)
+
+    if (!ispassword) {
+      throw new ApiError(400,"Please enter correct password")
+      
+    }
+      
+
+     const {myuseraccesstoken,myuserrefreshtoken}=await generateAccessandRefreshToken(user._id)
+   
+   console.log("hello:",user._id)
+
+  const loggedInuser=await User.findById(user._id).select(
+   "-password -refreshToken"
+  )
+
+  const option={
+   httpOnly:true,
+   secure:true
+  }
+ return res
+ .status(200)
+ .cookie("accessToken",myuseraccesstoken,option)
+ .cookie("refreshToken",myuserrefreshtoken,option)
+ .json(
+   new ApiResponse(
+   {
+      user:loggedInuser,myuseraccesstoken,myuserrefreshtoken
+   },
+   "user loogiedIn sucessfully"
+ )
+
+ )
+})
+
+const userLogout=asyncHandler(async(req,res)=>{
+    await User.findByIdAndUpdate(
+      req.user._id,
+
+      {
+         $set:{
+            refreshToken:undefined
+         },
+      
+         
+      },
+      {
+         new:true
+      }
+   )
+   const option={
+   httpOnly:true,
+   secure:true
+  }
+
+  return res
+  .status(201)
+  .clearCookie("accessToken",option)
+  .clearCookie("refreshToken",option)
+  .json(new ApiResponse(200,{},"user logged out"))
+})
+
+const refreshAccessToken= asyncHandler(async(req,res)=>{
+   const incomingRefreshToken=req.cookie.refreshToken || req.boody.refreshToken
+   if (!incomingRefreshToken) {
+      throw new ApiError(401,"unauthorized request")
+      
+   }
+
+  try {
+   const decodedToken= jwt.verify(
+    incomingRefreshToken,
+    process.env.REFRESH_TOKEN_SECRET)
+ 
+ 
+ 
+   const user=await User.findById(decodedToken?._id)
+ 
+   if(!user){
+    throw new ApiError(401,"Invallis refresh token")
+   }
+ 
+ 
+ 
+   if(incomingRefreshToken!==refreshToken){
+     throw new ApiError(401,"Refresh token is expired or used")
+   }
+ 
+ const option={
+ httpOnly:true,
+ secure:ture
+ }
+ 
+    const {accessToken,newrefreshToken}=await generateAccessandRefreshToken()
+ 
+    return res
+    .status(200)
+    .cookie("accessToken",accessToken,option)
+    .cookie("refreshToken",newrefreshToken,option)
+     .json(
+      new ApiResponse(
+       200,
+       {accessToken,refreshToken:newrefreshToken},
+          "AccessToken is refreshed"
+       
+      )
+     )
+ 
+ 
+  } catch (error) {
+   throw new ApiError(401,error?.message || "Invalid refreshToken")
+  }
+
+  })
+
+
+export {userRegister,userLogin,userLogout,refreshAccessToken}
